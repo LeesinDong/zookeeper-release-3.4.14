@@ -103,9 +103,15 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory implements Runnable 
     }
 
     @Override
+    //到这里
     public void start() {
         // ensure thread is started once and only once
         if (thread.getState() == Thread.State.NEW) {
+            //zookeeperThread
+            //thread 其实构建的是一个 zookeeperThread 线程，并且线程的参数为 this，
+            // 表示当前 NIOServerCnxnFactory 也是实现了线程的类，那么它必须要重
+            // 写
+            // run 方法，因此定位到 NIOServerCnxnFactory.run。
             thread.start();
         }
     }
@@ -197,6 +203,9 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory implements Runnable 
         }
     }
 
+    //到此， NIOServer 的初始化以及启动过程就完成了。并且对 2181 的这个
+    // 端口进行监听。一旦发现有请求进来，就执行相应的处理即可。这块后续
+    // 在分析数据同步的时候再做详细了解
     //当收到客户端的请求时，会需要从这个方法里面来看-> create/delete/setdata
     public void run() {
         while (!ss.socket().isClosed()) {

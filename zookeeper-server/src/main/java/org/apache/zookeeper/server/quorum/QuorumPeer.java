@@ -632,10 +632,18 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
     }
     
     @Override
+    //QuorumPeer.start 方法，重写了 Thread 的 start。也就是在线程启动之
+    // 前，会做以下操作
+    // 1. 通过 loadDataBase 恢复快照数据
+    // 2. cnxnFactory.start() 启动 zkServer，相当于用户可以通过 2181 这个端
+    // 口进行通信了，这块后续在讲。我们还是以 leader 选举为主线
     public synchronized void start() {
-        loadDataBase(); //加载数据()
+        loadDataBase(); //加载数据()  // 恢复快照数据
+        //看NIOServerCnxnFactory
         cnxnFactory.start();      //cnxnFacotory?  跟通信有关系. ->暴露一个2181的端口号
         startLeaderElection();  //开始leader选举-> 启动一个投票的监听、初始化一个选举算法FastLeader.
+        //很明显， super.start() 表示当前类 QuorumPeer 继承了线程，线程必须要
+        // 重写 run 方法，所以我们可以在 QuorumPeer 中找到一个 run 方法
         super.start(); //当前的QuorumPeer继承Thread，调用Thread.start() ->QuorumPeer.run()
     }
 
@@ -711,8 +719,13 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
     		throw re;
     	}
     	//TODO  先留一个问题->
+        //这个 getView 返回的就是在配置文件中配置的
+        // server.myid=ip:port:port。 view 在哪里解析的呢？
+        //遍历配置，通过myid，找到对应的那一行，拿到对应的ip
         for (QuorumServer p : getView().values()) {
             if (p.id == myid) {
+                //获得当前 zkserver myid 对应
+                // 的 ip 地址
                 myQuorumAddr = p.addr; //地址： 1 ->myQuorumAddr=192.168.13.102
                 break;
             }
@@ -720,6 +733,8 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
         if (myQuorumAddr == null) {
             throw new RuntimeException("My id " + myid + " not in the peer list");
         }
+        // /根据 electionType 匹配对应的选举算法,electionType 默
+        // 认值为 3.可以在配置文件中动态配置
         if (electionType == 0) { //选举的策略
             try {
                 udpSocket = new DatagramSocket(myQuorumAddr.getPort());
@@ -729,7 +744,7 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
                 throw new RuntimeException(e);
             }
         }
-        //
+        //选举算法
         this.electionAlg = createElectionAlgorithm(electionType);
     }
     
@@ -829,9 +844,12 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
             qcm = createCnxnManager();
             QuorumCnxManager.Listener listener = qcm.listener;
             if(listener != null){
-                listener.start();
+                //listener 实现了线程，所以在 run 方法中可以看到构建
+                // ServerSocket 的请求，这里专门用来接收其他
+                // zkServer 的投票请求， //这块后续再分析
+                listener.start();//启动监听器，这个监听具体
                 //创建一个FastLeaderElection选举算法
-                le = new FastLeaderElection(this, qcm);
+                le = new FastLeaderElection(this, qcm);//初始化 FastLeaderElection
             } else {
                 LOG.error("Null listener when initializing cnx manager");
             }
@@ -873,6 +891,15 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
     }
 
     @Override
+    //这段代码的逻辑比较长。粗略看一下结构，好像也不难
+    // PeerState 有几种状态，分别是
+    // 1. LOOKING，竞选状态。
+    // 2. FOLLOWING，随从状态，同步 leader 状态，参与投票。
+    // 3. OBSERVING，观察状态,同步 leader 状态，不参与投票。
+    // 4. LEADING，领导者状态。
+    // 对于选举来说，默认都是 LOOKING 状态，
+    // 只有 LOOKING 状态才会去执行选举算法。每个服务器在启动时都会选择
+    // 自己做为领导，然后将投票信息发送出去，循环一直到选举出领导为止。
     public void run() {
         setName("QuorumPeer" + "[myid=" + getId() + "]" +
                 cnxnFactory.getLocalAddress());
@@ -910,12 +937,15 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
              * Main loop
              * 死循环
              */
+            //… 根据选举状态，选择不同的处理方式
             while (running) {
                 switch (getPeerState()) {//第一次启动的时候，LOOKING
                 case LOOKING:
                     LOG.info("LOOKING");
-
+                    //判断是否为只读模式,通过”readonlymode.enabled”开启
+                    //直接不看了先
                     if (Boolean.getBoolean("readonlymode.enabled")) {
+                        //只读模式的启动流程
                         LOG.info("Attempting to start ReadOnlyZooKeeperServer");
 
                         // Create read-only server but don't start it immediately
@@ -961,6 +991,8 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
                     } else {
                         try {
                             setBCVote(null);
+                            //设置当前的投票，通过策略模式来决定当前
+                            // 用哪个选举算法来进行领导选举
                             //setCurrentVote -> 确定了谁是leader了。
                             setCurrentVote(makeLEStrategy().lookForLeader());
                         } catch (Exception e) {
@@ -969,6 +1001,7 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
                         }
                     }
                     break;
+                    //…后续逻辑暂时不用管
                 case OBSERVING:
                     try {
                         LOG.info("OBSERVING");
@@ -985,7 +1018,10 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
                 case FOLLOWING:
                     try {
                         LOG.info("FOLLOWING");
+                        //初始化一个 Follower 对象
+                        // 构建一个 FollowerZookeeperServer，表示 follower 节点的请求处理服务
                         setFollower(makeFollower(logFactory));
+                        //进入
                         follower.followLeader(); //连接到leader
                     } catch (Exception e) {
                         LOG.warn("Unexpected exception",e);
@@ -998,7 +1034,12 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
                 case LEADING:
                     LOG.info("LEADING");
                     try {
+                        //初始化一个 Leader 对象，构建一个 LeaderZookeeperServer，用于表示
+                        // leader 节点的请求处理服务
                         setLeader(makeLeader(logFactory));
+                        //在 Leader 端, 则通过 lead()来处理与 Follower 的交互
+                        // leader 和 follower 的处理逻辑这里就不再展开来分析，大家课后可以自己
+                        // 去分析并且画出他们的交互图
                         leader.lead(); //lead 状态
                         setLeader(null);
                     } catch (Exception e) {
@@ -1053,6 +1094,9 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
      * A 'view' is a node's current opinion of the membership of the entire
      * ensemble.
      */
+    //getView 里面实际上返回的是一个 quorumPeers，就是参与本次投票的成
+    // 员有哪些。这个属性在哪里赋值的呢？
+    // 我们又得回到 runFromConfig 方法中
     public Map<Long,QuorumPeer.QuorumServer> getView() {
         return Collections.unmodifiableMap(this.quorumPeers);
     }

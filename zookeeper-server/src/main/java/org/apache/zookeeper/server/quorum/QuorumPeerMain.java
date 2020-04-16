@@ -79,6 +79,7 @@ public class QuorumPeerMain {
         QuorumPeerMain main = new QuorumPeerMain();
         try {
             //zoo.cfg
+            //进入
             main.initializeAndRun(args);
         } catch (IllegalArgumentException e) {
             LOG.error("Invalid arguments, exiting abnormally", e);
@@ -116,7 +117,8 @@ public class QuorumPeerMain {
         purgeMgr.start();
         //如果是集群模式，会调用 runFromConfig.servers 实际就是我们在 zoo.cfg 里面配置的集群节点
         if (args.length == 1 && config.servers.size() > 0) {
-            runFromConfig(config);//如果args==1，走这段代码
+            //进这个
+            runFromConfig(config);//如果args==1，走这段代码//配置集群了
         } else {//否则直接运行单机模式
             LOG.warn("Either no config or no quorum defined in config, running "
                     + " in standalone mode");
@@ -134,6 +136,7 @@ public class QuorumPeerMain {
   
       LOG.info("Starting quorum peer");
       try {
+          //这里看看createFactory
           ServerCnxnFactory cnxnFactory = ServerCnxnFactory.createFactory();
           cnxnFactory.configure(config.getClientPortAddress(),
                                 config.getMaxClientCnxns());
@@ -149,6 +152,7 @@ public class QuorumPeerMain {
           quorumPeer.setTickTime(config.getTickTime());
           quorumPeer.setInitLimit(config.getInitLimit());
           quorumPeer.setSyncLimit(config.getSyncLimit());
+          ////投票决定方式，默认超过半数就通过
           quorumPeer.setQuorumListenOnAllIPs(config.getQuorumListenOnAllIPs());
           quorumPeer.setCnxnFactory(cnxnFactory);// 设置cnxnFacotory
           quorumPeer.setQuorumVerifier(config.getQuorumVerifier());
@@ -172,6 +176,13 @@ public class QuorumPeerMain {
           quorumPeer.setQuorumCnxnThreadsSize(config.quorumCnxnThreadsSize);
           quorumPeer.initialize();
 
+          //从名字可以看出来，是基于配置文件来进行启动。
+          // 所以整个方法都是对参数进行解析和设置 ， 因为这些参数暂时还没用到，
+          // 所以没必要去看。直接看核心的代码
+          // quorumPeer.start()， 启动一个线程，那么从这句代码可以看出来
+          // QuorumPeer 实际是继承了线程。那么它里面一定有一个 run 方法
+
+          //启动主线程
           quorumPeer.start();
           quorumPeer.join();
       } catch (InterruptedException e) {

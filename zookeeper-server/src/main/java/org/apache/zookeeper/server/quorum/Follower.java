@@ -67,25 +67,32 @@ public class Follower extends Learner{
         self.end_fle = 0;
         fzk.registerJMX(new FollowerBean(this, zk), self.jmxLocalPeerBean);
         try {
+            //根据 sid 找到对应 leader，拿到 lead 连接信息
             QuorumServer leaderServer = findLeader();            
             try {
+                //连接到 Leader
                 //follower要去连接到leader
                 connectToLeader(leaderServer.addr, leaderServer.hostname);
+                //将 Follower 的 zxid 及 myid 等信息封装好发送到 Leader，同步 epoch。
+                // 也就是意味着接下来 follower 节点只同步新epoch 的数据信息
                 long newEpochZxid = registerWithLeader(Leader.FOLLOWERINFO);
 
                 //check to see if the leader zxid is lower than ours
                 //this should never happen but is just a safety check
+
+                //如果 leader 的 epoch 比当前 follow 节点的poch 还小，抛异常
                 long newEpoch = ZxidUtils.getEpochFromZxid(newEpochZxid);
                 if (newEpoch < self.getAcceptedEpoch()) {
                     LOG.error("Proposed leader epoch " + ZxidUtils.zxidToString(newEpochZxid)
                             + " is less than our accepted epoch " + ZxidUtils.zxidToString(self.getAcceptedEpoch()));
                     throw new IOException("Error: Epoch of leader is lower");
                 }
+                // 和 leader 进行数据同步
                 syncWithLeader(newEpochZxid);                
                 QuorumPacket qp = new QuorumPacket();
-                while (this.isRunning()) {
-                    readPacket(qp);
-                    processPacket(qp);
+                while (this.isRunning()) {//接受 Leader消息，执行并反馈给 leader，线程在此自旋
+                    readPacket(qp);//从 leader 读取数据包
+                    processPacket(qp);//处理 packet
                 }
             } catch (Exception e) {
                 LOG.warn("Exception when following the leader", e);

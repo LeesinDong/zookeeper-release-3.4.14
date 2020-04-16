@@ -56,7 +56,12 @@ public class QuorumMaj implements QuorumVerifier {
     /**
      * Verifies if a set is a majority.
      */
+    //判断当前节点的票数是否是大于一半，默认采用 QuorumMaj 来实现
     public boolean containsQuorum(Set<Long> set){
+        //这个 half 的值是多少呢？，也就是说，在构建 QuorumMaj 的时候，传递了当前集群节点的数量，这里是 3
+        // 那么， hafl=3/2=1 可以在 QuorumPeerConfig.parseProperties 这个方法中，找到如下代码。
+
+        //那么 set.size()>1. 意味着至少要有两个节点的票据是选择你当 leader，否则，还得继续投
         return (set.size() > half); //已经归纳的票据是否大于half .2>1  -> leader选举、 数据同步
     }
     

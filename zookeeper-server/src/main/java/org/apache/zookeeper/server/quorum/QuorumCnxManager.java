@@ -263,6 +263,7 @@ public class QuorumCnxManager {
      */
     public void initiateConnection(final Socket sock, final Long sid) {
         try {
+            //进入
             startConnection(sock, sid);
         } catch (IOException e) {
             LOG.error("Exception while connecting, id: {}, addr: {}, closing learner connection",
@@ -320,7 +321,12 @@ public class QuorumCnxManager {
             }
         }
     }
-
+    //SendWorker 会监听对应 sid 的阻塞队列，启动的时候回如果队列为空时
+    // 会重新发送一次最前最后的消息，以防上一次处理是服务器异常退出，造
+    // 成上一条消息未处理成功； 然后就是不停监听队里，发现有消息时调用
+    // send 方法
+    // RecvWorker： RecvWorker 不停监听 socket 的 inputstream，读取消息放
+    // 到消息接收队列中,消息放入队列中， qcm 的流程就完毕了。
     private boolean startConnection(Socket sock, Long sid)
             throws IOException {
         DataOutputStream dout = null;
@@ -344,11 +350,13 @@ public class QuorumCnxManager {
 
         // If lost the challenge, then drop the new connection
         if (sid > this.mySid) {
+            //为了防止重复建立连接， 只允许 sid 大的主动连接 sid 小的
             LOG.info("Have smaller server identifier, so dropping the " +
                      "connection: (" + sid + ", " + this.mySid + ")");
             closeSocket(sock);
             // Otherwise proceed with the connection
         } else {
+            //构建一个发送线程和接收线程,负责针对当前连接的数据传递,后续的逻辑比较简单，就不做分析
             SendWorker sw = new SendWorker(sock, sid);
             RecvWorker rw = new RecvWorker(sock, din, sid, sw);
             sw.setRecv(rw);
@@ -360,7 +368,7 @@ public class QuorumCnxManager {
             
             senderWorkerMap.put(sid, sw);
             queueSendMap.putIfAbsent(sid, new ArrayBlockingQueue<ByteBuffer>(SEND_CAPACITY));
-            
+            //分别启动
             sw.start();
             rw.start();
             
@@ -380,10 +388,11 @@ public class QuorumCnxManager {
     public void receiveConnection(final Socket sock) {
         DataInputStream din = null;
         try {
+            //获取客户端的数据包
             din = new DataInputStream(
                     new BufferedInputStream(sock.getInputStream()));
 
-            handleConnection(sock, din);
+            handleConnection(sock, din);////调用 handle 进行处理
         } catch (IOException e) {
             LOG.error("Exception handling connection, addr: {}, closing server connection",
                      sock.getRemoteSocketAddress());
@@ -428,6 +437,7 @@ public class QuorumCnxManager {
         Long sid = null;
         try {
             // Read server id
+            //获取客户端的 sid，也就是 myid
             sid = din.readLong();
             if (sid < 0) { // this is not a server id but a protocol version (see ZOOKEEPER-1633)
                 sid = din.readLong();
@@ -473,20 +483,21 @@ public class QuorumCnxManager {
              * up, so we have to shut down the workers before trying to open a
              * new connection.
              */
+            //为了防止重复建立连接，只允许 sid 大的主动连接 sid 小的
             SendWorker sw = senderWorkerMap.get(sid);
             if (sw != null) {
-                sw.finish();
+                sw.finish();//关闭连接
             }
 
             /*
              * Now we start a new connection
              */
             LOG.debug("Create new connection to server: " + sid);
-            closeSocket(sock);
-            connectOne(sid);
+            closeSocket(sock);//关闭连接
+            connectOne(sid);//向 sid 发起连接
 
             // Otherwise start worker threads to receive data.
-        } else {
+        } else {//同样，构建一个 SendWorker 和RecvWorker 进行发送和接收数据
             SendWorker sw = new SendWorker(sock, sid);
             RecvWorker rw = new RecvWorker(sock, din, sid, sw);
             sw.setRecv(rw);
@@ -514,25 +525,36 @@ public class QuorumCnxManager {
         /*
          * If sending message to myself, then simply enqueue it (loopback).
          */
-        if (this.mySid == sid) {
+        if (this.mySid == sid) {//如果接受者是自己，直接放置到接收队列
              b.position(0);
              addToRecvQueue(new Message(b.duplicate(), sid));
             /*
              * Otherwise send to the corresponding thread to send.
              */
-        } else {
+        } else {//否则发送到对应的发送队列上
              /*
               * Start a new connection if doesn't have one already.
               */
+             //判断当前的 sid 是否已经存在于发送队列，
+            // 如果是，则直接把已经存在的数据发送出去
              ArrayBlockingQueue<ByteBuffer> bq = new ArrayBlockingQueue<ByteBuffer>(SEND_CAPACITY);
+             //put与putIfAbsent区别:
+            // put在放入数据时，如果放入数据的key已经存在与Map中，最后放入的数据会覆盖之前存在的数据，
+            // 而putIfAbsent在放入数据时，如果存在重复的key，那么putIfAbsent不会放入值。
+
+             //每个sid对应一个队列
+             //queueSendMap是用来做缓存的，已经有当前sid对应的就取出来直接发送
              ArrayBlockingQueue<ByteBuffer> bqExisting = queueSendMap.putIfAbsent(sid, bq);
              if (bqExisting != null) {
                  addToSendQueue(bqExisting, b);
              } else {
                  addToSendQueue(bq, b);
              }
+             //连接申请
+            // 调用链 connectOne-->initiateConnection-->startConnection ， startConnection
+            // 就是发送方启动入口
+            //进入
              connectOne(sid);//目标机器的sid
-                
         }
     }
     
@@ -565,6 +587,7 @@ public class QuorumCnxManager {
                 if (quorumSaslAuthEnabled) {
                     initiateConnectionAsync(sock, sid);
                 } else {
+                    //进入
                     initiateConnection(sock, sid);
                 }
             } catch (UnresolvedAddressException e) {
@@ -752,7 +775,7 @@ public class QuorumCnxManager {
                         if (quorumSaslAuthEnabled) {
                             receiveConnectionAsync(client);
                         } else {
-                            receiveConnection(client);
+                            receiveConnection(client);//接收客户端请求
                         }
 
                         numRetries = 0;
