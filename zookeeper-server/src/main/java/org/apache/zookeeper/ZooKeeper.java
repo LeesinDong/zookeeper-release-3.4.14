@@ -131,6 +131,8 @@ public class ZooKeeper {
      * API.
      */
     private static class ZKWatchManager implements ClientWatchManager {
+        //终于找到了我们本地的三个map
+        //path    自定义的watcher实现
         private final Map<String, Set<Watcher>> dataWatches =
             new HashMap<String, Set<Watcher>>();
         private final Map<String, Set<Watcher>> existWatches =
@@ -253,9 +255,12 @@ public class ZooKeeper {
          */
         public void register(int rc) {
             if (shouldAddWatch(rc)) {
+                //拿到watcher，rc=0 进入getWatches方法   ExistsWatchRegistration类
                 Map<String, Set<Watcher>> watches = getWatches(rc);
                 synchronized(watches) {
+                    //通过path拿到watchers
                     Set<Watcher> watchers = watches.get(clientPath);
+                    //上面的get只是返回一个map，但是没有new，这里new出来，并put进去东西
                     if (watchers == null) {
                         watchers = new HashSet<Watcher>();
                         watches.put(clientPath, watchers);
@@ -285,6 +290,7 @@ public class ZooKeeper {
 
         @Override
         protected Map<String, Set<Watcher>> getWatches(int rc) {
+            //进入dataWatches
             return rc == 0 ?  watchManager.dataWatches : watchManager.existWatches;
         }
 
@@ -435,6 +441,10 @@ public class ZooKeeper {
      * @throws IllegalArgumentException
      *             if an invalid chroot path is specified
      */
+    //在创建一个 ZooKeeper 客户端对象实例时，我们通过 new Watcher()向构造方法中
+    // 传入一个默认的 Watcher, 这个 Watcher 将作为整个 ZooKeeper 会话期间的默认
+    // Watcher，会一直被保存在客户端 ZKWatchManager 的 defaultWatcher 中;代码如
+    // 下
     public ZooKeeper(String connectString, int sessionTimeout, Watcher watcher,
             boolean canBeReadOnly)
         throws IOException
@@ -442,12 +452,23 @@ public class ZooKeeper {
         LOG.info("Initiating client connection, connectString=" + connectString
                 + " sessionTimeout=" + sessionTimeout + " watcher=" + watcher);
 
-        watchManager.defaultWatcher = watcher;
+        watchManager.defaultWatcher = watcher; //--在这里将 watcher 设置到ZKWatchManager
 
+        //解析连接的字符串
         ConnectStringParser connectStringParser = new ConnectStringParser(
                 connectString);
         HostProvider hostProvider = new StaticHostProvider(
                 connectStringParser.getServerAddresses());
+        //--初始化了 ClientCnxn，并且调用 cnxn.start()方法
+
+        //ClientCnxn:是 Zookeeper 客户端和 Zookeeper 服务器端进行通信和事件通知处理的主要类，它内部包含两个类，
+        // \1. SendThread ：负责客户端和服务器端的数据通信, 也包括事件信息的传输
+        // \2. EventThread : 主要在客户端回调注册的 Watchers 进行通知处理
+
+
+        //1.SendThread 发送请求的线程
+        //2.eventThread 处理watvher事件的线程
+        //进入ClientCnxn
         cnxn = new ClientCnxn(connectStringParser.getChrootPath(),
                 hostProvider, sessionTimeout, this, watchManager,
                 getClientCnxnSocket(), canBeReadOnly);
@@ -1090,6 +1111,8 @@ public class ZooKeeper {
         PathUtils.validatePath(clientPath);
 
         // the watch contains the un-chroot path
+        //这三行很重要
+        //注册一个监听事件，注册到本地为ExistsWatchRegistration
         WatchRegistration wcb = null;
         if (watcher != null) {
             wcb = new ExistsWatchRegistration(watcher, clientPath);
@@ -1098,12 +1121,19 @@ public class ZooKeeper {
         final String serverPath = prependChroot(clientPath);
 
         RequestHeader h = new RequestHeader();
+        //当前请求的类型，服务端根据不同的类型做不同的处理
         h.setType(ZooDefs.OpCode.exists);
+        //一个request
         ExistsRequest request = new ExistsRequest();
+        //将会传递到服务端的两个信息
         request.setPath(serverPath);
         request.setWatch(watcher != null);
+        //一个response  从服务端拿到response
         SetDataResponse response = new SetDataResponse();
+        //cnxn客户端网络请求的处理类
+        //进入submitRequest
         ReplyHeader r = cnxn.submitRequest(h, request, response, wcb);
+        //后面的不管
         if (r.getErr() != 0) {
             if (r.getErr() == KeeperException.Code.NONODE.intValue()) {
                 return null;

@@ -71,6 +71,10 @@ public class FollowerZooKeeperServer extends LearnerZooKeeperServer {
 
     @Override
     protected void setupRequestProcessors() {
+        //链路1：
+        //FollowerRequestProcessor->CommitProcessor->FinalRequestProcessor
+        //链路2：
+        //SyncRequestProcessor->SendAckRequestProcessor
         RequestProcessor finalProcessor = new FinalRequestProcessor(this);
         commitProcessor = new CommitProcessor(finalProcessor,
                 Long.toString(getServerId()), true,
@@ -79,6 +83,7 @@ public class FollowerZooKeeperServer extends LearnerZooKeeperServer {
         firstProcessor = new FollowerRequestProcessor(this, commitProcessor);
         ((FollowerRequestProcessor) firstProcessor).start();
         syncProcessor = new SyncRequestProcessor(this,
+                //ack？zk中的事务的提交是基于一个2pc，所以有一个ack，follower告诉leader，事务是否处理成功了
                 new SendAckRequestProcessor((Learner)getFollower()));
         syncProcessor.start();
     }

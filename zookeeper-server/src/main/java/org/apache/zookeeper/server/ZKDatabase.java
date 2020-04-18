@@ -64,8 +64,11 @@ public class ZKDatabase {
      * make sure on a clear you take care of 
      * all these members.
      */
+    //树形结构
     protected DataTree dataTree;
+    //session会话
     protected ConcurrentHashMap<Long, Integer> sessionsWithTimeouts;
+    //快照
     protected FileTxnSnapLog snapLog;
     protected long minCommittedLog, maxCommittedLog;
     public static final int commitLogCount = 500;
@@ -332,6 +335,7 @@ public class ZKDatabase {
      * datatree/zkdatabase
      */
     public ProcessTxnResult processTxn(TxnHeader hdr, Record txn) {
+        //进入
         return dataTree.processTxn(hdr, txn);
     }
 
@@ -343,6 +347,7 @@ public class ZKDatabase {
      * @throws KeeperException.NoNodeException
      */
     public Stat statNode(String path, ServerCnxn serverCnxn) throws KeeperException.NoNodeException {
+        //进入
         return dataTree.statNode(path, serverCnxn);
     }
     

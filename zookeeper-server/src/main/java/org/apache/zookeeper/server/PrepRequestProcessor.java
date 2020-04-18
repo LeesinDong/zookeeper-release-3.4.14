@@ -105,6 +105,7 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements
             RequestProcessor nextProcessor) {
         super("ProcessThread(sid:" + zks.getServerId() + " cport:"
                 + zks.getClientPort() + "):", zks.getZooKeeperServerListener());
+        //nextProcessor就是刚刚传进来的，所以构成了一个链路
         this.nextProcessor = nextProcessor;
         this.zks = zks;
     }
@@ -119,7 +120,9 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements
     @Override
     public void run() {
         try {
+            //while tue没关系，当前类中有shutdown方法
             while (true) {
+                //从队列中拿  异步
                 Request request = submittedRequests.take();
                 long traceMask = ZooTrace.CLIENT_REQUEST_TRACE_MASK;
                 if (request.type == OpCode.ping) {
@@ -131,6 +134,7 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements
                 if (Request.requestOfDeath == request) {
                     break;
                 }
+                //进入
                 pRequest(request);
             }
         } catch (RequestProcessorException e) {
@@ -534,6 +538,8 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements
         request.txn = null;
         
         try {
+            //根据不同的类型做判断
+            //为了看exitst，一直往下找
             switch (request.type) {
                 case OpCode.create:
                 CreateRequest createRequest = new CreateRequest();
@@ -630,6 +636,7 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements
                 break;
  
             //All the rest don't need to create a Txn - just verify session
+            // 如果是下面这些操作的话，不需要创建一个txn，即事务，只需要做session的校验
             case OpCode.sync:
             case OpCode.exists:
             case OpCode.getData:
@@ -638,6 +645,7 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements
             case OpCode.getChildren2:
             case OpCode.ping:
             case OpCode.setWatches:
+                //session校验
                 zks.sessionTracker.checkSession(request.sessionId,
                         request.getOwner());
                 break;
@@ -678,6 +686,7 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements
             }
         }
         request.zxid = zks.getZxid();
+        //下一个处理器做处理   sync
         nextProcessor.processRequest(request);
     }
 
@@ -760,6 +769,8 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements
         return acl.size() > 0;
     }
 
+    //这个责任链是生产者消费者模式，发现每个责任链都是生产者消费者模式
+    //把当前的request加入到阻塞队列
     public void processRequest(Request request) {
         // request.addRQRec(">prep="+zks.outstandingChanges.size());
         submittedRequests.add(request);

@@ -64,6 +64,7 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
         if (sock == null) {
             throw new IOException("Socket is null!");
         }
+        //服务端回写请求
         if (sockKey.isReadable()) {
             int rc = sock.read(incomingBuffer);
             if (rc < 0) {
@@ -91,6 +92,7 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
                     updateLastHeard();
                     initialized = true;
                 } else {
+                    //读取服务端返回的信息
                     sendThread.readResponse(incomingBuffer);
                     lenBuffer.clear();
                     incomingBuffer = lenBuffer;
@@ -98,8 +100,12 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
                 }
             }
         }
+        //要写请求,是这里
         if (sockKey.isWritable()) {
             synchronized(outgoingQueue) {
+                //数据包
+                //从这里面去拿queue中的数据的
+                //进入
                 Packet p = findSendablePacket(outgoingQueue,
                         cnxn.sendThread.clientTunneledAuthenticationInProgress());
 
@@ -112,8 +118,12 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
                                 (p.requestHeader.getType() != OpCode.auth)) {
                             p.requestHeader.setXid(cnxn.getXid());
                         }
+                        //创建一个需要传递的数据的内容
+                        //进入,很重要
                         p.createBB();
                     }
+                    //写到目标服务器上
+                    //通过上面的createBB知道会把request和header传递进去
                     sock.write(p.bb);
                     if (!p.bb.hasRemaining()) {
                         sentCount++;
@@ -169,6 +179,8 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
             // This packet must be sent so that the SASL authentication process
             // can proceed, but all other packets should wait until
             // SASL authentication completes.
+            //通过迭代器拿到数据的。
+            //outGingQueue其实是一个list
             ListIterator<Packet> iter = outgoingQueue.listIterator();
             while (iter.hasNext()) {
                 Packet p = iter.next();
@@ -349,6 +361,7 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
         selector.select(waitTimeOut);
         Set<SelectionKey> selected;
         synchronized (this) {
+            //多路复用器
             selected = selector.selectedKeys();
         }
         // Everything below and until we get back to the select is
@@ -362,7 +375,9 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
                     updateLastSendAndHeard();
                     sendThread.primeConnection();
                 }
+            //    多路复用器如果是可读或者可写的
             } else if ((k.readyOps() & (SelectionKey.OP_READ | SelectionKey.OP_WRITE)) != 0) {
+                //进入doIO
                 doIO(pendingQueue, outgoingQueue, cnxn);
             }
         }

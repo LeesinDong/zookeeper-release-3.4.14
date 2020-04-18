@@ -154,6 +154,8 @@ public class QuorumPeerMain {
           quorumPeer.setSyncLimit(config.getSyncLimit());
           ////投票决定方式，默认超过半数就通过
           quorumPeer.setQuorumListenOnAllIPs(config.getQuorumListenOnAllIPs());
+          //这个很明显是一个工厂模式，基于这个工厂类创建什么呢？ 打开
+          // createFactory 方法看看就知道了
           quorumPeer.setCnxnFactory(cnxnFactory);// 设置cnxnFacotory
           quorumPeer.setQuorumVerifier(config.getQuorumVerifier());
           quorumPeer.setClientPortAddress(config.getClientPortAddress());

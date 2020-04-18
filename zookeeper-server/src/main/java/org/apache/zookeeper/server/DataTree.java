@@ -363,6 +363,8 @@ public class DataTree {
      * @return the patch of the created node
      * @throws KeeperException
      */
+    //在内存里面添加一个数据
+    //最后有段代码需要看
     public String createNode(String path, byte data[], List<ACL> acl,
             long ephemeralOwner, int parentCVersion, long zxid, long time)
             throws KeeperException.NoNodeException,
@@ -430,6 +432,9 @@ public class DataTree {
             updateCount(lastPrefix, 1);
             updateBytes(lastPrefix, data == null ? 0 : data.length);
         }
+        //触发器
+        //一个dataWatches，一个childWatches
+        //进入triggerWatch
         dataWatches.triggerWatch(path, Event.EventType.NodeCreated);
         childWatches.triggerWatch(parentName.equals("") ? "/" : parentName,
                 Event.EventType.NodeChildrenChanged);
@@ -575,6 +580,7 @@ public class DataTree {
         Stat stat = new Stat();
         DataNode n = nodes.get(path);
         if (watcher != null) {
+            //进入
             dataWatches.addWatch(path, watcher);
         }
         if (n == null) {
@@ -709,9 +715,13 @@ public class DataTree {
             rc.err = 0;
             rc.multiResult = null;
             switch (header.getType()) {
+                //如果是创建，一个节点
+                //在服务器上创建一个节点的本质
+                //创建完 break ，进入到下面的逻辑
                 case OpCode.create:
                     CreateTxn createTxn = (CreateTxn) txn;
                     rc.path = createTxn.getPath();
+                    //进入
                     createNode(
                             createTxn.getPath(),
                             createTxn.getData(),

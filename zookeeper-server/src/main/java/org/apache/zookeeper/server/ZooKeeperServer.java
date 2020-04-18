@@ -421,11 +421,27 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
         notifyAll();
     }
 
+    //配置一个责任链
+    /*
+     * 单机模式
+     *
+     * 集群模式
+     * leader
+     * follower
+     * */
+
+    //这是单机模式的
+    //如果是leader，会重写这个setupRequestProcessors
     protected void setupRequestProcessors() {
+
+        //异步责任链
+        //通过下面的包含关系得到，单机模式的
+        //PrepRequestProcessor->SyncRequestProcessor->finalProcessor
         RequestProcessor finalProcessor = new FinalRequestProcessor(this);
         RequestProcessor syncProcessor = new SyncRequestProcessor(this,
                 finalProcessor);
         ((SyncRequestProcessor)syncProcessor).start();
+        //进入PrepRequestProcessor看看
         firstProcessor = new PrepRequestProcessor(this, syncProcessor);
         ((PrepRequestProcessor)firstProcessor).start();
     }
@@ -724,9 +740,12 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
         Request si = new Request(cnxn, sessionId, xid, type, bb, authInfo);
         submitRequest(si);
     }
-    
+
+    //负责在服务端提交当前请求
     public void submitRequest(Request si) {
-        if (firstProcessor == null) {
+        //看一下这个firestProcessor在哪里出似乎还的
+        //到setupRequestProcessors方法
+        if (firstProcessor == null) {//processor 处理器， request 过来以后会经历一系列处理器的处理过程
             synchronized (this) {
                 try {
                     // Since all requests are passed to the request
@@ -745,11 +764,12 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
             }
         }
         try {
-            touch(si.cnxn);
-            boolean validpacket = Request.isValid(si.type);
+            touch(si.cnxn);//会话管理机制的功能，不用看
+            boolean validpacket = Request.isValid(si.type);//判断是否合法
             if (validpacket) {
-                firstProcessor.processRequest(si);
-                if (si.cnxn != null) {
+                firstProcessor.processRequest(si);//根据刚才的责任链，就会走PrepRequestProcessor（假设现在是单机模式）
+                if (si.cnxn != null) {//调用 firstProcessor发起请求，而这个 firstProcess 是一个接口，有多个实现类，
+                    // 具体的调用链是怎么样的？往下看吧
                     incInProcess();
                 }
             } else {
@@ -959,17 +979,19 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
         return false; 
     }
 
+    //处理客户端传送过来的数据包
     public void processPacket(ServerCnxn cnxn, ByteBuffer incomingBuffer) throws IOException {
         // We have the request, now process and setup for next
         InputStream bais = new ByteBufferInputStream(incomingBuffer);
         BinaryInputArchive bia = BinaryInputArchive.getArchive(bais);
         RequestHeader h = new RequestHeader();
-        h.deserialize(bia, "header");
+        //通过jute进行反序列化
+        h.deserialize(bia, "header");//反序列化客户端 header 头信息
         // Through the magic of byte buffers, txn will not be
         // pointing
         // to the start of the txn
         incomingBuffer = incomingBuffer.slice();
-        if (h.getType() == OpCode.auth) {
+        if (h.getType() == OpCode.auth) {//判断当前操作类型，如果是 auth操作，则执行下面的代码，这次不是这次看的是exist，所以不走这里
             LOG.info("got auth packet " + cnxn.getRemoteSocketAddress());
             AuthPacket authPacket = new AuthPacket();
             ByteBufferInputStream.byteBuffer2Record(incomingBuffer, authPacket);
@@ -1010,18 +1032,20 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
                 cnxn.sendResponse(rh, null, null);
             }
             return;
-        } else {
+        } else {//如果不是授权操作，再判断是否为 sasl 操作  ，也不是这里
             if (h.getType() == OpCode.sasl) {
                 Record rsp = processSasl(incomingBuffer,cnxn);
                 ReplyHeader rh = new ReplyHeader(h.getXid(), 0, KeeperException.Code.OK.intValue());
                 cnxn.sendResponse(rh,rsp, "response"); // not sure about 3rd arg..what is it?
                 return;
             }
-            else {
+            else {//最终进入这个代码块进行处理   ，所以exist走这里，进入else
+                //封装请求对象
                 Request si = new Request(cnxn, cnxn.getSessionId(), h.getXid(),
                   h.getType(), incomingBuffer, cnxn.getAuthInfo());
                 si.setOwner(ServerCnxn.me);
-                submitRequest(si);
+                //进入
+                submitRequest(si);//提交请求
             }
         }
         cnxn.incrOutstandingRequests(h);
@@ -1073,6 +1097,8 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
         ProcessTxnResult rc;
         int opCode = hdr.getType();
         long sessionId = hdr.getClientId();
+        //当前自己的内存数据库处理事务
+        //进入
         rc = getZKDatabase().processTxn(hdr, txn);
         if (opCode == OpCode.createSession) {
             if (txn instanceof CreateSessionTxn) {

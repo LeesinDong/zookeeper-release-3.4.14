@@ -207,9 +207,12 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory implements Runnable 
     // 端口进行监听。一旦发现有请求进来，就执行相应的处理即可。这块后续
     // 在分析数据同步的时候再做详细了解
     //当收到客户端的请求时，会需要从这个方法里面来看-> create/delete/setdata
+
+    //exist ping connect
     public void run() {
         while (!ss.socket().isClosed()) {
             try {
+                //通过多路复用轮询
                 selector.select(1000);
                 Set<SelectionKey> selected;
                 synchronized (this) {
@@ -238,8 +241,10 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory implements Runnable 
                             sk.attach(cnxn);
                             addCnxn(cnxn);
                         }
+                    //    如果是exist的话是这里
                     } else if ((k.readyOps() & (SelectionKey.OP_READ | SelectionKey.OP_WRITE)) != 0) {
                         NIOServerCnxn c = (NIOServerCnxn) k.attachment();
+                        //进入doIO
                         c.doIO(k);
                     } else {
                         if (LOG.isDebugEnabled()) {

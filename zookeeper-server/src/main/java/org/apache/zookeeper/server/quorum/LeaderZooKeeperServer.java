@@ -57,14 +57,22 @@ public class LeaderZooKeeperServer extends QuorumZooKeeperServer {
     }
     
     @Override
+    //leader的链路
     protected void setupRequestProcessors() {
+        // 链路:
+        //PrepRequestProcessor->ProposalRequestProcessor->CommitProcessor->ToBeAppliedRequestProcessor->FinalRequestProcessor
+        //因为如果是集群里面，要涉及到同步、投票、zab协议等，都在leader实现的，所以
         RequestProcessor finalProcessor = new FinalRequestProcessor(this);
         RequestProcessor toBeAppliedProcessor = new Leader.ToBeAppliedRequestProcessor(
                 finalProcessor, getLeader().toBeApplied);
+        //toBeAppliedProcessor维护leader的tobeApplie的队列，他是用来去保证顺序一致性的关键的队列，保存已经完成投票的事务请求，但是
+        //事务请求没有别应用
         commitProcessor = new CommitProcessor(toBeAppliedProcessor,
                 Long.toString(getServerId()), false,
                 getZooKeeperServerListener());
         commitProcessor.start();
+        //ProposalRequestProcessor事务请求
+        //commitProcessor是异步的
         ProposalRequestProcessor proposalProcessor = new ProposalRequestProcessor(this,
                 commitProcessor);
         proposalProcessor.initialize();

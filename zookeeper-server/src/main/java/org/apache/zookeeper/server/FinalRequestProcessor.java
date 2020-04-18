@@ -115,8 +115,9 @@ public class FinalRequestProcessor implements RequestProcessor {
             if (request.hdr != null) {
                TxnHeader hdr = request.hdr;
                Record txn = request.txn;
-
-               rc = zks.processTxn(hdr, txn);
+               // 如果当前的setData或者delete等的操作
+               // 进入
+               rc = zks.processTxn(hdr, txn);//保存数据到DateTree中，很重要
             }
             // do not add non quorum packets to the queue.
             if (Request.isQuorum(request.type)) {
@@ -261,17 +262,24 @@ public class FinalRequestProcessor implements RequestProcessor {
                 break;
             }
             case OpCode.exists: {
-                lastOp = "EXIS";
+                lastOp = "EXIS";   //到这里找到exist
                 // TODO we need to figure out the security requirement for this!
                 ExistsRequest existsRequest = new ExistsRequest();
                 ByteBufferInputStream.byteBuffer2Record(request.request,
                         existsRequest);
+                //path就是刚刚设置的watcher
                 String path = existsRequest.getPath();
                 if (path.indexOf('\0') != -1) {
                     throw new KeeperException.BadArgumentsException();
                 }
+                //stat就是客户端拿到的状态信息
+                //existsRequest.getWatch() 的到true
+                //statNode中的两个参数就是之前设置的path 和 true
+                //进入statNode
                 Stat stat = zks.getZKDatabase().statNode(path, existsRequest
-                        .getWatch() ? cnxn : null);
+                        .getWatch() ? cnxn : null);  //cnxn服务端的网络处理类
+                //把stat信息返回   ，nio的网络请求进行回写的。
+                //rsp往下看
                 rsp = new ExistsResponse(stat);
                 break;
             }
@@ -416,6 +424,7 @@ public class FinalRequestProcessor implements RequestProcessor {
                     request.createTime, Time.currentElapsedTime());
 
         try {
+            //网络处理类,把请求回写出去
             cnxn.sendResponse(hdr, rsp, "response");
             if (closeSession) {
                 cnxn.sendCloseSession();

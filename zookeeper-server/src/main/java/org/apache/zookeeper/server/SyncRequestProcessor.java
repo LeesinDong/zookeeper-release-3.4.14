@@ -137,6 +137,7 @@ public class SyncRequestProcessor extends ZooKeeperCriticalThread implements Req
                 }
                 if (si != null) {
                     // track the number of records written to the log
+                    //把请求持久化到本地磁盘
                     if (zks.getZKDatabase().append(si)) {
                         logCount++;
                         if (logCount > (snapCount / 2 + randRoll)) {
@@ -150,6 +151,7 @@ public class SyncRequestProcessor extends ZooKeeperCriticalThread implements Req
                                 snapInProcess = new ZooKeeperThread("Snapshot Thread") {
                                         public void run() {
                                             try {
+                                                //快照
                                                 zks.takeSnapshot();
                                             } catch(Exception e) {
                                                 LOG.warn("Unexpected exception", e);
@@ -166,6 +168,7 @@ public class SyncRequestProcessor extends ZooKeeperCriticalThread implements Req
                         // flushes (writes), then just pass this to the next
                         // processor
                         if (nextProcessor != null) {
+                            //走下一个processor  final
                             nextProcessor.processRequest(si);
                             if (nextProcessor instanceof Flushable) {
                                 ((Flushable)nextProcessor).flush();

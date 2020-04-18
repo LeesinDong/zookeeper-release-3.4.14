@@ -53,6 +53,7 @@ public class WatchManager {
     }
 
     public synchronized void addWatch(String path, Watcher watcher) {
+        //HashMap<String, HashSet<Watcher>>
         HashSet<Watcher> list = watchTable.get(path);
         if (list == null) {
             // don't waste memory if there are few watches on a node
@@ -62,7 +63,7 @@ public class WatchManager {
             watchTable.put(path, list);
         }
         list.add(watcher);
-
+        //做了一个反转  key变成watcher  value变成path,这样就可以处理多个事件
         HashSet<String> paths = watch2Paths.get(watcher);
         if (paths == null) {
             // cnxns typically have many watches, so use default cap here
@@ -97,6 +98,11 @@ public class WatchManager {
                 KeeperState.SyncConnected, path);
         HashSet<Watcher> watchers;
         synchronized (this) {
+            //从watchTable中移除这个节点
+            //为什么只有一次？因为这里面被移除了
+            //这个watch是通过hashMap存储的，如果持久化存储这么多的事件的话，需要占用很大的内存空间，而且事件一旦触发
+            //非常多的客户端都需要通知，这个性能是非常大的，所以做了这样一个优化
+            //所以不保证一定成功，如果传输过程中丢失了，也移除了，那只能再重新注册一个监听
             watchers = watchTable.remove(path);
             if (watchers == null || watchers.isEmpty()) {
                 if (LOG.isTraceEnabled()) {
@@ -106,6 +112,7 @@ public class WatchManager {
                 }
                 return null;
             }
+            //把节点对应的所有watchers 对应的watch2Paths中对应的记录移除掉
             for (Watcher w : watchers) {
                 HashSet<String> paths = watch2Paths.get(w);
                 if (paths != null) {
@@ -117,6 +124,7 @@ public class WatchManager {
             if (supress != null && supress.contains(w)) {
                 continue;
             }
+            //进入
             w.process(e);
         }
         return watchers;

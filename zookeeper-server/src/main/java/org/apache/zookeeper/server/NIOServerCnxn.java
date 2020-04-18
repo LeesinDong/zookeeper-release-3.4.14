@@ -203,12 +203,13 @@ public class NIOServerCnxn extends ServerCnxn {
         }
 
         if (incomingBuffer.remaining() == 0) { // have we read length bytes?
+            //进入，收到这个事件
             packetReceived();
             incomingBuffer.flip();
             if (!initialized) {
                 readConnectRequest();
             } else {
-                readRequest();
+                readRequest();//读取客户端发送过来的请求
             }
             lenBuffer.clear();
             incomingBuffer = lenBuffer;
@@ -242,6 +243,7 @@ public class NIOServerCnxn extends ServerCnxn {
 
                 return;
             }
+            //服务端是读的
             if (k.isReadable()) {
                 int rc = sock.read(incomingBuffer);
                 if (rc < 0) {
@@ -260,7 +262,9 @@ public class NIOServerCnxn extends ServerCnxn {
                         // continuation
                         isPayload = true;
                     }
+                    //读完了
                     if (isPayload) { // not the case for 4letterword
+                        //进入
                         readPayload();
                     }
                     else {
@@ -390,6 +394,7 @@ public class NIOServerCnxn extends ServerCnxn {
     }
 
     private void readRequest() throws IOException {
+        //进入
         zkServer.processPacket(this, incomingBuffer);
     }
     
@@ -1152,7 +1157,7 @@ public class NIOServerCnxn extends ServerCnxn {
      * @see org.apache.zookeeper.server.ServerCnxnIface#process(org.apache.zookeeper.proto.WatcherEvent)
      */
     @Override
-    synchronized public void process(WatchedEvent event) {
+    synchronized public void   process(WatchedEvent event) {
         ReplyHeader h = new ReplyHeader(-1, -1L, 0);
         if (LOG.isTraceEnabled()) {
             ZooTrace.logTraceMessage(LOG, ZooTrace.EVENT_DELIVERY_TRACE_MASK,
@@ -1163,7 +1168,7 @@ public class NIOServerCnxn extends ServerCnxn {
 
         // Convert WatchedEvent to a type that can be sent over the wire
         WatcherEvent e = event.getWrapper();
-
+        //sendResponse,给客户端发送请求
         sendResponse(h, e, "notification");
     }
 
