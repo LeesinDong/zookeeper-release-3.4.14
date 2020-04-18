@@ -261,10 +261,12 @@ public class ZooKeeper {
                     //通过path拿到watchers
                     Set<Watcher> watchers = watches.get(clientPath);
                     //上面的get只是返回一个map，但是没有new，这里new出来，并put进去东西
+                    //通过路径没有的话，就放进去一个空的set，结构  path，set（watcher）
                     if (watchers == null) {
                         watchers = new HashSet<Watcher>();
                         watches.put(clientPath, watchers);
                     }
+                    //把wathcer放到watchers这个set中。
                     watchers.add(watcher);
                 }
             }
@@ -452,7 +454,8 @@ public class ZooKeeper {
         LOG.info("Initiating client connection, connectString=" + connectString
                 + " sessionTimeout=" + sessionTimeout + " watcher=" + watcher);
 
-        watchManager.defaultWatcher = watcher; //--在这里将 watcher 设置到ZKWatchManager
+        //--在这里将 watcher 设置到ZKWatchManager
+        watchManager.defaultWatcher = watcher;
 
         //解析连接的字符串
         ConnectStringParser connectStringParser = new ConnectStringParser(
@@ -1122,6 +1125,7 @@ public class ZooKeeper {
 
         RequestHeader h = new RequestHeader();
         //当前请求的类型，服务端根据不同的类型做不同的处理
+        //把exists类型包装到header中
         h.setType(ZooDefs.OpCode.exists);
         //一个request
         ExistsRequest request = new ExistsRequest();

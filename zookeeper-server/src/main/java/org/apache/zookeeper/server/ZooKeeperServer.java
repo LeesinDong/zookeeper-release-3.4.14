@@ -1032,6 +1032,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
                 cnxn.sendResponse(rh, null, null);
             }
             return;
+        //    //根据不同的类型进行操作，这里既不是auth也不是sasl，所以走最后的
         } else {//如果不是授权操作，再判断是否为 sasl 操作  ，也不是这里
             if (h.getType() == OpCode.sasl) {
                 Record rsp = processSasl(incomingBuffer,cnxn);
